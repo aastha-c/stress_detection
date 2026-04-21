@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Send Sensor Data</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .smiley-sidebar {
+            position: fixed;
+            top: 50%;
+            right: 0;
+            left: auto;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 1.2em;
+            z-index: 2;
+            padding: 1em 0.3em 1em 0.3em;
+            align-items: flex-end;
+        }
+
+        .smiley-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: #fffde7;
+            box-shadow: 0 2px 8px #ffe08255;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.7em;
+            border: 2px solid #ffe082;
+            margin-left: 0.2em;
+            transition: transform 0.15s;
+        }
+
+        .smiley-icon:hover {
+            transform: scale(1.15) rotate(-8deg);
+            background: #fff9c4;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(120deg, #e0f7fa 0%, #b2ebf2 100%);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            position: relative;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 0;
+            background: url('https://headspace-contentful.imgix.net/5wW6Id4LH4wOtVqbONjIhi/31e72192201f423ff2da17f90b63c989/HS-Evergreen-Brand-Smile_3-sb.png?ixlib=js-3.8.0&w=3840&auto=format%2Ccompress&fit=max') no-repeat center center;
+            background-size: cover;
+            opacity: 0.18;
+            pointer-events: none;
+        }
+
+        .header-bar,
+        .container,
+        #dataChart,
+        .result {
+            position: relative;
+            z-index: 1;
+        }
+
+        .header-bar {
+            width: 100vw;
+            background: linear-gradient(90deg, #2196f3 60%, #43e97b 100%);
+            color: #fff;
+            padding: 1.2em 0 1em 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 12px rgba(33, 150, 243, 0.08);
+            margin-bottom: 2em;
+        }
+
+        .header-bar svg {
+            width: 2.2em;
+            height: 2.2em;
+            margin-right: 0.7em;
+        }
+
+        .container {
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 6px 32px rgba(33, 150, 243, 0.13);
+            padding: 2.5em 2em 2em 2em;
+            max-width: 400px;
+            width: 100%;
+            margin-bottom: 2em;
+        }
+
+        h2 {
+            text-align: center;
+            color: #2196f3;
+            margin-bottom: 1.5em;
+            letter-spacing: 1px;
+        }
+
+        label {
+            display: block;
+            margin-top: 1em;
+            color: #1976d2;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 0.8em 1em;
+            margin-top: 0.3em;
+            border: 1.5px solid #b2ebf2;
+            border-radius: 10px;
+            background: #e3f2fd;
+            font-size: 1em;
+            transition: border 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="number"]:focus {
+            border: 2px solid #43e97b;
+            outline: none;
+            background: #fff;
+            box-shadow: 0 0 0 2px #b2dfdb55;
+        }
+
+        button {
+            margin-top: 2em;
+            width: 100%;
+            padding: 1em 0;
+            font-size: 1.1em;
+            background: linear-gradient(90deg, #43e97b 60%, #38f9d7 100%);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 12px rgba(67, 233, 123, 0.10);
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background: linear-gradient(90deg, #2196f3 60%, #43e97b 100%);
+            transform: translateY(-2px) scale(1.01);
+        }
+
+        .result {
+            margin-top: 2em;
+            font-weight: bold;
+            color: #2196f3;
+            text-align: center;
+            min-height: 1.5em;
+        }
+
+        #dataChart {
+            margin-top: 2em;
+            max-width: 100%;
+            background: linear-gradient(120deg, #e3f2fd 0%, #b2dfdb 100%);
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(33, 150, 243, 0.08);
+        }
+    </style>
+    <script>
+        // Smiley click reactions
+        window.addEventListener('DOMContentLoaded', function () {
+            const smileys = document.querySelectorAll('.smiley-icon');
+            const messages = [
+                'Breathe in... and out! 😊',
+                'Relax your shoulders. 😌',
+                'Keep smiling! 😁',
+                'You are awesome! 😃',
+                'Find your calm. 🧘'
+            ];
+            smileys.forEach((smiley, idx) => {
+                smiley.addEventListener('click', function () {
+                    // Animate
+                    smiley.style.transform = 'scale(1.3) rotate(-12deg)';
+                    setTimeout(() => {
+                        smiley.style.transform = '';
+                    }, 350);
+                    // Show message
+                    let msg = document.getElementById('smiley-msg');
+                    if (!msg) {
+                        msg = document.createElement('div');
+                        msg.id = 'smiley-msg';
+                        msg.style.position = 'fixed';
+                        msg.style.left = '60px';
+                        msg.style.top = '20%';
+                        msg.style.background = 'rgba(255,253,231,0.98)';
+                        msg.style.color = '#fbc02d';
+                        msg.style.fontWeight = 'bold';
+                        msg.style.fontSize = '1.2em';
+                        msg.style.padding = '0.7em 1.2em';
+                        msg.style.borderRadius = '12px';
+                        msg.style.boxShadow = '0 2px 12px #ffe08255';
+                        msg.style.zIndex = '100';
+                        document.body.appendChild(msg);
+                    }
+                    msg.textContent = messages[idx];
+                    msg.style.opacity = '1';
+                    setTimeout(() => {
+                        msg.style.opacity = '0';
+                    }, 1800);
+                });
+            });
+        });
+    </script>
+</head>
+
+<body>
+    <div class="smiley-sidebar">
+        <div class="smiley-icon" title="Take a deep breath!">😊</div>
+        <div class="smiley-icon" title="Smile and relax!">😌</div>
+        <div class="smiley-icon" title="Stay positive!">😁</div>
+        <div class="smiley-icon" title="You got this!">😃</div>
+        <div class="smiley-icon" title="Peaceful mind">🧘</div>
+    </div>
+    <div class="header-bar">
+        <!-- Medical cross icon -->
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="22" fill="#fff" stroke="#43e97b" stroke-width="3" />
+            <path d="M24 12v12m0 0v12m0-12h12m-12 0H12" stroke="#2196f3" stroke-width="3" stroke-linecap="round" />
+        </svg>
+        <!-- Brain icon -->
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"
+            style="width:2.2em;height:2.2em;margin:0 0.5em;">
+            <ellipse cx="16" cy="24" rx="10" ry="14" fill="#e1bee7" stroke="#7b4397" stroke-width="2" />
+            <ellipse cx="32" cy="24" rx="10" ry="14" fill="#b3e5fc" stroke="#2196f3" stroke-width="2" />
+            <path d="M16 10c2 2 2 6 0 8m0 0c2 2 2 6 0 8m0 0c2 2 2 6 0 8" stroke="#7b4397" stroke-width="2"
+                fill="none" />
+            <path d="M32 10c-2 2-2 6 0 8m0 0c-2 2-2 6 0 8m0 0c-2 2-2 6 0 8" stroke="#2196f3" stroke-width="2"
+                fill="none" />
+        </svg>
+        <!-- Meditation statue icon -->
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"
+            style="width:2.2em;height:2.2em;margin:0 0.5em;">
+            <circle cx="24" cy="14" r="6" fill="#fff9c4" stroke="#fbc02d" stroke-width="2" />
+            <ellipse cx="24" cy="32" rx="12" ry="8" fill="#b2dfdb" stroke="#009688" stroke-width="2" />
+            <path d="M24 20v8m0 0l-6 4m6-4l6 4" stroke="#fbc02d" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <span style="font-size:1.5em;font-weight:bold;letter-spacing:1px;">Medical Sensor Dashboard</span>
+    </div>
+    <!-- Removed small image, now used as background -->
+    <div class="container">
+        <h2>Send Sensor Data</h2>
+        <form id="sensorForm">
+            <label>acc_x
+                <input type="number" step="any" name="acc_x" placeholder="e.g. 0.12" required>
+            </label>
+            <label>acc_y
+                <input type="number" step="any" name="acc_y" placeholder="e.g. -0.05" required>
+            </label>
+            <label>acc_z
+                <input type="number" step="any" name="acc_z" placeholder="e.g. 9.81" required>
+            </label>
+            <label>heart_rate
+                <input type="number" step="any" name="heart_rate" placeholder="e.g. 72" required>
+            </label>
+            <label>timestamp
+                <input type="number" name="timestamp" placeholder="e.g. 1700000000" required>
+            </label>
+            <button type="submit">Send Data</button>
+        </form>
+        <div class="result" id="result"></div>
+        <canvas id="dataChart"></canvas>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+<script>
+    const backendUrl = "http://127.0.0.1:8000/sensor-data";
+    const chartLabels = [];
+    const accXData = [];
+    const accYData = [];
+    const accZData = [];
+    const heartRateData = [];
+    const stressLevelData = [];
+    // Chart.js setup
+    const ctx = document.getElementById('dataChart').getContext('2d');
+    const dataChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartLabels,
+            datasets: [
+                { label: 'acc_x', data: accXData, borderColor: '#4a90e2', backgroundColor: 'rgba(74,144,226,0.1)', fill: false, tension: 0.2 },
+                { label: 'acc_y', data: accYData, borderColor: '#50e3c2', backgroundColor: 'rgba(80,227,194,0.1)', fill: false, tension: 0.2 },
+                { label: 'acc_z', data: accZData, borderColor: '#f5a623', backgroundColor: 'rgba(245,166,35,0.1)', fill: false, tension: 0.2 },
+                { label: 'heart_rate', data: heartRateData, borderColor: '#e94e77', backgroundColor: 'rgba(233,78,119,0.1)', fill: false, tension: 0.2 },
+                { label: 'stress_level', data: stressLevelData, borderColor: '#7b4397', backgroundColor: 'rgba(123,67,151,0.1)', fill: false, tension: 0.2 }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' },
+                title: { display: true, text: 'Sensor Data & Stress Level' }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Timestamp' } },
+                y: { title: { display: true, text: 'Value' } }
+            }
+        }
+    });
+    // Dummy stress level calculation (replace with backend value if available)
+    function calculateStressLevel(data) {
+        // Example: stress = heart_rate/100 + |acc_x|+|acc_y|+|acc_z|/30
+        return (
+            data.heart_rate / 100 +
+            (Math.abs(data.acc_x) + Math.abs(data.acc_y) + Math.abs(data.acc_z)) / 30
+        ).toFixed(2);
+    }
+    document.getElementById('sensorForm').onsubmit = async function (e) {
+        e.preventDefault();
+        const form = e.target;
+        const data = {
+            acc_x: parseFloat(form.acc_x.value),
+            acc_y: parseFloat(form.acc_y.value),
+            acc_z: parseFloat(form.acc_z.value),
+            heart_rate: parseFloat(form.heart_rate.value),
+            timestamp: parseInt(form.timestamp.value)
+        };
+        document.getElementById('result').textContent = 'Sending...';
+        try {
+            const res = await fetch(backendUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const text = await res.text();
+            document.getElementById('result').textContent = 'Response: ' + text;
+            // Add data to chart
+            chartLabels.push(data.timestamp);
+            accXData.push(data.acc_x);
+            accYData.push(data.acc_y);
+            accZData.push(data.acc_z);
+            heartRateData.push(data.heart_rate);
+            // If backend returns stress, parse it, else use dummy
+            let stress = null;
+            try {
+                const parsed = JSON.parse(text);
+                if (parsed.stress_level !== undefined) stress = parsed.stress_level;
+            } catch { }
+            if (stress === null) stress = calculateStressLevel(data);
+            stressLevelData.push(stress);
+            dataChart.update();
+        } catch (err) {
+            document.getElementById('result').textContent = 'Error: ' + err;
+        }
+    };
+</script>
+
+</html>

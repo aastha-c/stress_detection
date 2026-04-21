@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stress Sensor — Phone Client</title>
+    <meta name="description" content="Real-time phone sensor client for stress detection using accelerometer and gyroscope data.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0a1a;
+            --bg-card: rgba(20, 20, 45, 0.85);
+            --bg-glass: rgba(255, 255, 255, 0.05);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            --text-primary: #e8e8f0;
+            --text-secondary: #8888aa;
+            --accent-green: #00e676;
+            --accent-red: #ff1744;
+            --accent-blue: #448aff;
+            --accent-purple: #7c4dff;
+            --accent-orange: #ff9100;
+            --gradient-calm: linear-gradient(135deg, #00e676 0%, #00bfa5 100%);
+            --gradient-stress: linear-gradient(135deg, #ff1744 0%, #d50000 100%);
+            --gradient-connecting: linear-gradient(135deg, #448aff 0%, #7c4dff 100%);
+            --shadow-glow-green: 0 0 40px rgba(0, 230, 118, 0.3);
+            --shadow-glow-red: 0 0 40px rgba(255, 23, 68, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            min-height: 100dvh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 20%, rgba(68, 138, 255, 0.08) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 80%, rgba(124, 77, 255, 0.06) 0%, transparent 50%),
+                        radial-gradient(circle at 50% 50%, rgba(0, 230, 118, 0.04) 0%, transparent 50%);
+            animation: bgFloat 20s ease-in-out infinite;
+            z-index: 0;
+        }
+
+        @keyframes bgFloat {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(-2%, 3%) rotate(1deg); }
+            66% { transform: translate(2%, -2%) rotate(-1deg); }
+        }
+
+        .app {
+            position: relative;
+            z-index: 1;
+            padding: 20px 16px;
+            max-width: 420px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 16px 0 8px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+
+        .header p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            transition: all 0.3s ease;
+        }
+
+        .card-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        /* Status Orb */
+        .status-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-orb {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.8rem;
+            position: relative;
+            transition: all 0.5s ease;
+        }
+
+        .status-orb.disconnected {
+            background: rgba(68, 138, 255, 0.15);
+            border: 2px solid rgba(68, 138, 255, 0.3);
+        }
+
+        .status-orb.relaxed {
+            background: rgba(0, 230, 118, 0.15);
+            border: 2px solid rgba(0, 230, 118, 0.3);
+            box-shadow: var(--shadow-glow-green);
+        }
+
+        .status-orb.stressed {
+            background: rgba(255, 23, 68, 0.15);
+            border: 2px solid rgba(255, 23, 68, 0.3);
+            box-shadow: var(--shadow-glow-red);
+            animation: stressPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes stressPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .status-orb::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            animation: orbSpin 3s linear infinite;
+        }
+
+        .status-orb.relaxed::after {
+            border-top-color: var(--accent-green);
+            border-right-color: rgba(0, 230, 118, 0.3);
+        }
+
+        .status-orb.stressed::after {
+            border-top-color: var(--accent-red);
+            border-right-color: rgba(255, 23, 68, 0.3);
+        }
+
+        @keyframes orbSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-label {
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .status-label.relaxed { color: var(--accent-green); }
+        .status-label.stressed { color: var(--accent-red); }
+        .status-label.connecting { color: var(--accent-blue); }
+
+        .stress-prob {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* Connection Button */
+        .btn-connect {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 14px;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-connect.start {
+            background: var(--gradient-connecting);
+        }
+
+        .btn-connect.stop {
+            background: var(--gradient-stress);
+        }
+
+        .btn-connect:active {
+            transform: scale(0.98);
+        }
+
+        .btn-connect::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+        }
+
+        /* Sensor Gauges */
+        .gauges-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        .gauge {
+            text-align: center;
+            padding: 12px 8px;
+            background: var(--bg-glass);
+            border-radius: 14px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .gauge-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .gauge-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            transition: color 0.3s;
+        }
+
+        .gauge-value.x { color: var(--accent-red); }
+        .gauge-value.y { color: var(--accent-green); }
+        .gauge-value.z { color: var(--accent-blue); }
+        .gauge-value.alpha { color: var(--accent-orange); }
+        .gauge-value.beta { color: var(--accent-purple); }
+        .gauge-value.gamma { color: #00bcd4; }
+
+        .gauge-unit {
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* Activity Bar */
+        .activity-bar-container {
+            margin-top: 8px;
+        }
+
+        .activity-bar-bg {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .activity-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease, background 0.3s ease;
+            background: var(--gradient-calm);
+        }
+
+        .activity-bar-fill.high {
+            background: var(--gradient-stress);
+        }
+
+        .activity-label-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .activity-label-row span {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .activity-label-row .value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Connection info */
+        .connection-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: var(--bg-glass);
+            border-radius: 10px;
+            font-size: 0.8rem;
+        }
+
+        .conn-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .conn-dot.connected {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+            animation: dotPulse 2s ease-in-out infinite;
+        }
+
+        .conn-dot.disconnected {
+            background: var(--accent-red);
+        }
+
+        @keyframes dotPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Sample counter */
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .stat-chip {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            background: var(--bg-glass);
+            border-radius: 10px;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+
+        .stat-chip .num {
+            display: block;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        /* Permission overlay */
+        .permission-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 10, 26, 0.95);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .permission-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
+            padding: 32px 24px;
+            text-align: center;
+            max-width: 340px;
+            backdrop-filter: blur(20px);
+        }
+
+        .permission-card .icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+
+        .permission-card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 12px;
+        }
+
+        .permission-card p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .btn-grant {
+            padding: 14px 32px;
+            border: none;
+            border-radius: 14px;
+            background: var(--gradient-connecting);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn-grant:active {
+            transform: scale(0.96);
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <!-- Permission Overlay (for iOS 13+ DeviceMotion permission) -->
+    <div class="permission-overlay" id="permissionOverlay">
+        <div class="permission-card">
+            <div class="icon">📱</div>
+            <h2>Sensor & Camera Access</h2>
+            <p>This app needs access to your phone's accelerometer, gyroscope, and front-facing camera to detect stress patterns locally on your device.</p>
+            <button class="btn-grant" id="btnGrantPermission">Enable Sensors & Camera</button>
+        </div>
+    </div>
+
+    <div class="app">
+        <!-- Header -->
+        <div class="header">
+            <h1>🧠 Stress Sensor</h1>
+            <p>Live motion analysis for stress detection</p>
+        </div>
+
+        <!-- Status Orb -->
+        <div class="card">
+            <div class="status-section">
+                <div class="status-orb disconnected" id="statusOrb">🔗</div>
+                <div class="status-label connecting" id="statusLabel">Tap to Connect</div>
+                <div class="stress-prob" id="stressProb">—</div>
+            </div>
+        </div>
+
+        <!-- Connect Button -->
+        <button class="btn-connect start" id="btnConnect" onclick="toggleConnection()">
+            <span>▶</span> Start Streaming
+        </button>
+
+        <!-- Accelerometer Gauges -->
+        <div class="card">
+            <div class="card-title">⚡ Accelerometer (m/s²)</div>
+            <div class="gauges-grid">
+                <div class="gauge">
+                    <div class="gauge-label">X</div>
+                    <div class="gauge-value x" id="accX">0.00</div>
+                    <div class="gauge-unit">m/s²</div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Y</div>
+                    <div class="gauge-value y" id="accY">0.00</div>
+                    <div class="gauge-unit">m/s²</div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Z</div>
+                    <div class="gauge-value z" id="accZ">9.81</div>
+                    <div class="gauge-unit">m/s²</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gyroscope Gauges -->
+        <div class="card">
+            <div class="card-title">🔄 Gyroscope (°/s)</div>
+            <div class="gauges-grid">
+                <div class="gauge">
+                    <div class="gauge-label">Alpha</div>
+                    <div class="gauge-value alpha" id="gyroA">0.00</div>
+                    <div class="gauge-unit">°/s</div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Beta</div>
+                    <div class="gauge-value beta" id="gyroB">0.00</div>
+                    <div class="gauge-unit">°/s</div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Gamma</div>
+                    <div class="gauge-value gamma" id="gyroG">0.00</div>
+                    <div class="gauge-unit">°/s</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Level -->
+        <div class="card">
+            <div class="card-title">📊 Motion Activity</div>
+            <div class="activity-bar-container">
+                <div class="activity-label-row">
+                    <span>Activity Level</span>
+                    <span class="value" id="activityValue">0%</span>
+                </div>
+                <div class="activity-bar-bg">
+                    <div class="activity-bar-fill" id="activityBar" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="stats-row">
+                <div class="stat-chip">
+                    <span class="num" id="sampleCount">0</span>
+                    Samples
+                </div>
+                <div class="stat-chip">
+                    <span class="num" id="streamRate">0</span>
+                    Hz
+                </div>
+                <div class="stat-chip">
+                    <span class="num" id="sessionTime">0s</span>
+                    Duration
+                </div>
+            </div>
+        </div>
+
+        <!-- Facial Activity -->
+        <div class="card" style="margin-top: 16px;">
+            <div class="card-title">📸 Facial Activity</div>
+            <div style="position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid var(--border-glass); aspect-ratio: 4/3;">
+                <video id="webcam" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 12px; transform: scaleX(-1);"></video>
+                <canvas id="faceCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 12px; transform: scaleX(-1);"></canvas>
+                <div id="camOverlay" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(10,10,26,0.8); z-index: 10; text-align: center; padding: 10px;">
+                    <span id="camLoading" style="color: #aab4ff; font-size: 0.8rem; margin-bottom: 10px;">Face AI ready.</span>
+                    <button class="btn-grant" id="btnStartCamManual" style="padding: 8px 16px; font-size: 0.8rem;">Start Camera</button>
+                </div>
+            </div>
+            <div id="faceLogs" style="font-size: 0.6rem; color: #7878a0; margin-top: 8px; max-height: 40px; overflow-y: auto; font-family: monospace;"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">Emotion:</span>
+                <span id="faceEmotion" style="font-weight: 700; color: var(--text-primary);">-</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">Facial Stress:</span>
+                <span id="faceStressGauge" style="font-weight: 700; color: var(--accent-green);">0%</span>
+            </div>
+        </div>
+
+        <!-- Connection Info -->
+        <div class="connection-info">
+            <div class="conn-dot disconnected" id="connDot"></div>
+            <span id="connText">Not connected to server</span>
+        </div>
+    </div>
+
+    <script>
+        // ── Configuration ──────────────────────────────────────────────────
+        // ── Configuration ──────────────────────────────────────────────────
+        let protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let host = window.location.host;
+        // In local development, if we accessed via IP, it will be included in host
+        const WS_URL = `${protocol}//${host}/ws/sensor`;
+        let ws = null;
+        let streaming = false;
+        let sensorPermission = false;
+        let sampleCount = 0;
+        let sessionStart = null;
+        let rateCounter = 0;
+        let rateTimer = null;
+
+        // Latest sensor values
+        let ax = 0, ay = 0, az = 9.81;
+        let ga = 0, gb = 0, gg = 0;
+        let latestPhoneFaceStress = 0.0;
+
+        // ── Permission Handling ────────────────────────────────────────────
+        const permOverlay = document.getElementById('permissionOverlay');
+
+        // Check if DeviceMotionEvent needs permission (iOS 13+)
+        if (typeof DeviceMotionEvent !== 'undefined' &&
+            typeof DeviceMotionEvent.requestPermission === 'function') {
+            document.getElementById('btnGrantPermission').addEventListener('click', async () => {
+                try {
+                    const response = await DeviceMotionEvent.requestPermission();
+                    if (response === 'granted') {
+                        sensorPermission = true;
+                        permOverlay.classList.add('hidden');
+                        startSensorListening();
+                        loadFaceModels(); // Start camera
+                    } else {
+                        alert('Permission denied. Sensor data cannot be captured.');
+                    }
+                } catch (err) {
+                    console.error('Permission error:', err);
+                    alert('Error requesting sensor permission: ' + err.message);
+                }
+            });
+        } else if ('DeviceMotionEvent' in window) {
+            // Android / desktop
+            sensorPermission = true;
+            document.getElementById('btnGrantPermission').addEventListener('click', async () => {
+                permOverlay.classList.add('hidden');
+                startSensorListening();
+                loadFaceModels(); // Start camera
+            });
+        } else {
+            // Fallback for no sensors, still allow camera
+            document.getElementById('btnGrantPermission').addEventListener('click', async () => {
+                permOverlay.classList.add('hidden');
+                loadFaceModels(); // Start camera
+                document.getElementById('btnGrantPermission').textContent = 'Sensors Not Available';
+                document.getElementById('btnGrantPermission').disabled = true;
+                document.querySelector('.permission-card p').textContent =
+                    'Your device does not support motion sensors. Camera started instead.';
+            });
+        }
+
+        // ── Sensor Listening ───────────────────────────────────────────────
+        function startSensorListening() {
+            console.log("Starting sensor listeners...");
+            window.addEventListener('devicemotion', (event) => {
+                const accel = event.accelerationIncludingGravity;
+                const rotation = event.rotationRate;
+
+                if (accel) {
+                    ax = accel.x || 0;
+                    ay = accel.y || 0;
+                    az = accel.z || 0;
+                }
+                if (rotation) {
+                    ga = rotation.alpha || 0;
+                    gb = rotation.beta || 0;
+                    gg = rotation.gamma || 0;
+                }
+
+                updateGauges();
+
+                // Send data if connected
+                if (streaming && ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        ax: round(ax, 4),
+                        ay: round(ay, 4),
+                        az: round(az, 4),
+                        ga: round(ga, 4),
+                        gb: round(gb, 4),
+                        gg: round(gg, 4),
+                        face_stress: latestPhoneFaceStress,
+                        t: Date.now() / 1000
+                    }));
+                    sampleCount++;
+                    rateCounter++;
+                }
+            });
+            console.log("devicemotion listener registered.");
+        }
+
+        // ── UI Updates ─────────────────────────────────────────────────────
+        function updateGauges() {
+            document.getElementById('accX').textContent = ax.toFixed(2);
+            document.getElementById('accY').textContent = ay.toFixed(2);
+            document.getElementById('accZ').textContent = az.toFixed(2);
+            document.getElementById('gyroA').textContent = ga.toFixed(2);
+            document.getElementById('gyroB').textContent = gb.toFixed(2);
+            document.getElementById('gyroG').textContent = gg.toFixed(2);
+
+            // Activity level (acceleration magnitude deviation from gravity)
+            const mag = Math.sqrt(ax * ax + ay * ay + az * az);
+            const activity = Math.min(Math.abs(mag - 9.81) / 5 * 100, 100);
+            document.getElementById('activityValue').textContent = activity.toFixed(0) + '%';
+            const bar = document.getElementById('activityBar');
+            bar.style.width = activity + '%';
+            bar.classList.toggle('high', activity > 50);
+
+            // Stats
+            document.getElementById('sampleCount').textContent = sampleCount;
+            if (sessionStart) {
+                const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+                const mins = Math.floor(elapsed / 60);
+                const secs = elapsed % 60;
+                document.getElementById('sessionTime').textContent =
+                    mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+            }
+        }
+
+        // ── WebSocket Connection ───────────────────────────────────────────
+        function toggleConnection() {
+            if (streaming) {
+                stopStreaming();
+            } else {
+                startStreaming();
+            }
+        }
+
+        function startStreaming() {
+            if (!sensorPermission) {
+                permOverlay.classList.remove('hidden');
+                return;
+            }
+
+            const btn = document.getElementById('btnConnect');
+            btn.innerHTML = '<span>⏳</span> Connecting...';
+
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                streaming = true;
+                sessionStart = Date.now();
+                sampleCount = 0;
+
+                btn.innerHTML = '<span>⏹</span> Stop Streaming';
+                btn.className = 'btn-connect stop';
+
+                document.getElementById('connDot').className = 'conn-dot connected';
+                document.getElementById('connText').textContent = 'Connected — streaming to server';
+
+                // Start rate counter
+                rateTimer = setInterval(() => {
+                    document.getElementById('streamRate').textContent = rateCounter;
+                    rateCounter = 0;
+                }, 1000);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    updatePrediction(data);
+                } catch (e) {}
+            };
+
+            ws.onclose = () => {
+                stopStreaming();
+            };
+
+            ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
+                stopStreaming();
+                document.getElementById('connText').textContent = 'Connection failed — check server';
+            };
+        }
+
+        function stopStreaming() {
+            streaming = false;
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            if (rateTimer) {
+                clearInterval(rateTimer);
+                rateTimer = null;
+            }
+
+            const btn = document.getElementById('btnConnect');
+            btn.innerHTML = '<span>▶</span> Start Streaming';
+            btn.className = 'btn-connect start';
+
+            document.getElementById('connDot').className = 'conn-dot disconnected';
+            document.getElementById('connText').textContent = 'Disconnected from server';
+            document.getElementById('streamRate').textContent = '0';
+
+            const orb = document.getElementById('statusOrb');
+            orb.className = 'status-orb disconnected';
+            orb.textContent = '🔗';
+            document.getElementById('statusLabel').className = 'status-label connecting';
+            document.getElementById('statusLabel').textContent = 'Tap to Connect';
+            document.getElementById('stressProb').textContent = '—';
+        }
+
+        function updatePrediction(data) {
+            const orb = document.getElementById('statusOrb');
+            const label = document.getElementById('statusLabel');
+            const prob = document.getElementById('stressProb');
+
+            if (data.prediction === 1) {
+                orb.className = 'status-orb stressed';
+                orb.textContent = '😰';
+                label.className = 'status-label stressed';
+                label.textContent = 'STRESS DETECTED';
+                prob.textContent = `Confidence: ${(data.stress_probability * 100).toFixed(0)}%`;
+            } else {
+                orb.className = 'status-orb relaxed';
+                orb.textContent = '😌';
+                label.className = 'status-label relaxed';
+                label.textContent = 'Relaxed';
+                prob.textContent = `Confidence: ${((1 - data.stress_probability) * 100).toFixed(0)}%`;
+            }
+        }
+
+        function round(val, decimals) {
+            return Math.round(val * Math.pow(10, decimals)) / Math.pow(10, decimals);
+        }
+
+        // ── Webcam Facial Analysis ─────────────────────────────────────────
+        const video = document.getElementById('webcam');
+        const faceCanvas = document.getElementById('faceCanvas');
+        const camOverlay = document.getElementById('camOverlay');
+        const camLoading = document.getElementById('camLoading');
+        const faceLogs = document.getElementById('faceLogs');
+        const btnStartCamManual = document.getElementById('btnStartCamManual');
+        
+        let faceModelsLoaded = false;
+
+        function logFace(msg) {
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            const div = document.createElement('div');
+            div.textContent = `[${time}] ${msg}`;
+            faceLogs.prepend(div);
+            if (faceLogs.childNodes.length > 5) faceLogs.removeChild(faceLogs.lastChild);
+            console.log("FaceAI:", msg);
+        }
+
+        async function loadFaceModels() {
+            if (faceModelsLoaded) return startWebcam();
+            
+            if (typeof faceapi === 'undefined') {
+                logFace("FaceAPI not loaded! Refresh page.");
+                camLoading.textContent = "Script Error.";
+                return;
+            }
+            
+            camLoading.textContent = "AI Loading...";
+            const modelPath = window.location.origin + '/static/models';
+            logFace(`Loading from ${modelPath}...`);
+            
+            try {
+                await faceapi.nets.tinyFaceDetector.loadFromUri(modelPath);
+                logFace("Face Detector OK.");
+                await faceapi.nets.faceExpressionNet.loadFromUri(modelPath);
+                logFace("Face Expression OK.");
+                
+                faceModelsLoaded = true;
+                logFace("AI Models Ready.");
+                startWebcam();
+            } catch (err) {
+                logFace("Fetch error. Check server logs.");
+                console.error(err);
+                camLoading.textContent = "Fetch Failed.";
+            }
+        }
+
+        function startWebcam() {
+            logFace("Requesting camera...");
+            camLoading.textContent = "Starting Camera...";
+            
+            const constraints = { 
+                video: { 
+                    facingMode: "user",
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                } 
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(stream => {
+                    logFace("Camera active.");
+                    video.srcObject = stream;
+                    camOverlay.style.display = 'none';
+                })
+                .catch(err => {
+                    logFace("Cam Error: " + err.name);
+                    camLoading.textContent = "Camera Denied.";
+                    btnStartCamManual.style.display = 'block';
+                });
+        }
+
+        btnStartCamManual.addEventListener('click', (e) => {
+            e.stopPropagation();
+            loadFaceModels();
+        });
+
+        video.addEventListener('play', () => {
+            logFace("Video playing.");
+            const displaySize = { width: video.videoWidth, height: video.videoHeight };
+            faceapi.matchDimensions(faceCanvas, displaySize);
+
+            setInterval(async () => {
+                if (!faceModelsLoaded || video.paused || video.ended) return;
+                
+                try {
+                    const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
+                    const ctx = faceCanvas.getContext('2d');
+                    ctx.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
+
+                    if (detections.length > 0) {
+                        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                        faceapi.draw.drawDetections(faceCanvas, resizedDetections);
+                        
+                        const expressions = detections[0].expressions;
+                        let totalVal = 0, exprStress = 0, topExpr = "", maxVal = -1;
+                        
+                        for (const [expr, prob] of Object.entries(expressions)) {
+                            if (prob > maxVal) { maxVal = prob; topExpr = expr; }
+                            let weight = 0;
+                            if (['angry', 'fearful'].includes(expr)) weight = 0.9;
+                            else if (['disgusted', 'sad'].includes(expr)) weight = 0.75;
+                            else if (expr === 'surprised') weight = 0.4;
+                            else if (expr === 'neutral') weight = 0.2;
+                            else if (expr === 'happy') weight = 0.0;
+                            exprStress += prob * weight;
+                            totalVal += prob;
+                        }
+                        if (totalVal > 0) exprStress /= totalVal;
+                        latestPhoneFaceStress = exprStress;
+                        
+                        document.getElementById('faceEmotion').textContent = topExpr;
+                        document.getElementById('faceStressGauge').textContent = (exprStress * 100).toFixed(0) + '%';
+                        document.getElementById('faceStressGauge').style.color = exprStress > 0.6 ? '#ff1744' : (exprStress > 0.3 ? '#ff9100' : '#00e676');
+                    } else {
+                        document.getElementById('faceEmotion').textContent = "Searching...";
+                        latestPhoneFaceStress = 0.0;
+                    }
+                } catch (e) {
+                    // Silently fail frame processing errors
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>

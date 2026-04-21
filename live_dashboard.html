@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stress Detection — Live Dashboard</title>
+    <meta name="description"
+        content="Real-time stress detection dashboard with live phone sensor monitoring and ML predictions.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #06061a;
+            --bg-secondary: #0c0c2a;
+            --bg-card: rgba(14, 14, 42, 0.9);
+            --bg-glass: rgba(255, 255, 255, 0.04);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(68, 138, 255, 0.2);
+            --text-primary: #e8e8f4;
+            --text-secondary: #7878a0;
+            --text-dim: #4a4a6a;
+            --accent-green: #00e676;
+            --accent-red: #ff1744;
+            --accent-blue: #448aff;
+            --accent-purple: #7c4dff;
+            --accent-orange: #ff9100;
+            --accent-cyan: #00e5ff;
+            --gradient-calm: linear-gradient(135deg, #00e676 0%, #00bfa5 100%);
+            --gradient-stress: linear-gradient(135deg, #ff1744 0%, #ff6e40 100%);
+            --shadow-green: 0 0 60px rgba(0, 230, 118, 0.2), 0 0 120px rgba(0, 230, 118, 0.05);
+            --shadow-red: 0 0 60px rgba(255, 23, 68, 0.2), 0 0 120px rgba(255, 23, 68, 0.05);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background grid */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                linear-gradient(rgba(68, 138, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(68, 138, 255, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background:
+                radial-gradient(circle at 20% 30%, rgba(68, 138, 255, 0.06) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(124, 77, 255, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(0, 230, 118, 0.03) 0%, transparent 40%);
+            animation: bgPulse 25s ease-in-out infinite;
+            z-index: 0;
+        }
+
+        @keyframes bgPulse {
+
+            0%,
+            100% {
+                transform: translate(0, 0);
+            }
+
+            33% {
+                transform: translate(-1%, 2%);
+            }
+
+            66% {
+                transform: translate(1%, -1%);
+            }
+        }
+
+        /* Layout */
+        .dashboard {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 20px rgba(68, 138, 255, 0.3);
+        }
+
+        .header-title h1 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #aab4ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .conn-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            border: 1px solid var(--border-glass);
+            background: var(--bg-glass);
+        }
+
+        .conn-badge .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .conn-badge .dot.on {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+            animation: dotBlink 2s ease-in-out infinite;
+        }
+
+        .conn-badge .dot.off {
+            background: var(--accent-red);
+        }
+
+        @keyframes dotBlink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 24px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: border-color 0.3s;
+        }
+
+        .card:hover {
+            border-color: var(--border-glow);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .card-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-secondary);
+        }
+
+        /* Main Grid */
+        .grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .grid-main {
+            grid-template-columns: 320px 1fr;
+            grid-template-rows: auto auto;
+        }
+
+        .grid-charts {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .grid-features {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        @media (max-width: 1100px) {
+            .grid-main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .grid-charts {
+                grid-template-columns: 1fr;
+            }
+
+            .grid-features {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Stress Indicator (left panel) */
+        .stress-panel {
+            grid-row: 1 / 3;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+            padding: 32px 24px;
+        }
+
+        .stress-ring {
+            position: relative;
+            width: 200px;
+            height: 200px;
+        }
+
+        .stress-ring canvas {
+            width: 200px;
+            height: 200px;
+        }
+
+        .stress-ring-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .stress-emoji {
+            font-size: 3rem;
+            line-height: 1;
+            margin-bottom: 4px;
+            transition: all 0.5s ease;
+        }
+
+        .stress-percent {
+            font-size: 2rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stress-percent.low {
+            color: var(--accent-green);
+        }
+
+        .stress-percent.mid {
+            color: var(--accent-orange);
+        }
+
+        .stress-percent.high {
+            color: var(--accent-red);
+        }
+
+        .stress-state {
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .stress-state.relaxed {
+            color: var(--accent-green);
+        }
+
+        .stress-state.stressed {
+            color: var(--accent-red);
+        }
+
+        .stress-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        /* QR Section */
+        .qr-section {
+            text-align: center;
+            padding: 16px;
+            background: var(--bg-glass);
+            border-radius: 16px;
+            border: 1px dashed var(--border-glass);
+            width: 100%;
+        }
+
+        .qr-section p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .qr-img {
+            width: 140px;
+            height: 140px;
+            border-radius: 12px;
+            background: white;
+            padding: 8px;
+            margin: 0 auto;
+        }
+
+        .qr-img img {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        .qr-url {
+            margin-top: 8px;
+            font-size: 0.7rem;
+            color: var(--accent-blue);
+            word-break: break-all;
+        }
+
+        /* Metric row */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        @media (max-width: 700px) {
+            .metrics-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .metric-card {
+            padding: 18px;
+            text-align: center;
+        }
+
+        .metric-icon {
+            font-size: 1.3rem;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 1.6rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 4px;
+        }
+
+        .metric-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metric-value.acc {
+            color: var(--accent-blue);
+        }
+
+        .metric-value.gyro {
+            color: var(--accent-purple);
+        }
+
+        .metric-value.intensity {
+            color: var(--accent-orange);
+        }
+
+        .metric-value.still {
+            color: var(--accent-cyan);
+        }
+
+        /* Charts */
+        .chart-container {
+            position: relative;
+            height: 220px;
+        }
+
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Feature grid */
+        .feature-cell {
+            padding: 14px;
+            text-align: center;
+            background: var(--bg-glass);
+            border-radius: 12px;
+            border: 1px solid var(--border-glass);
+            transition: all 0.3s ease;
+        }
+
+        .feature-name {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .feature-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .feature-bar {
+            height: 3px;
+            border-radius: 2px;
+            margin-top: 8px;
+            background: rgba(255, 255, 255, 0.06);
+            overflow: hidden;
+        }
+
+        .feature-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        /* Timeline */
+        .timeline-container {
+            height: 100px;
+        }
+
+        /* Waiting state */
+        .waiting-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            gap: 16px;
+        }
+
+        .waiting-state .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-glass);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .waiting-state p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Section spacing */
+        .section {
+            margin-top: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo-icon">🧠</div>
+                <div class="header-title">
+                    <h1>Stress Detection Dashboard</h1>
+                    <p>Real-time motion-based stress analysis</p>
+                </div>
+            </div>
+            <div class="header-status">
+                <div class="conn-badge" id="phoneBadge">
+                    <div class="dot off" id="phoneDot"></div>
+                    <span id="phoneStatus">Phone disconnected</span>
+                </div>
+                <div class="conn-badge" id="wsBadge">
+                    <div class="dot off" id="wsDot"></div>
+                    <span id="wsStatus">Connecting...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="grid grid-main">
+            <!-- Left: Stress Indicator Panel -->
+            <div class="card stress-panel" id="stressPanel">
+                <div class="card-label">Overall Stress Level</div>
+
+                <div class="stress-ring">
+                    <canvas id="stressRingCanvas" width="200" height="200"></canvas>
+                    <div class="stress-ring-center">
+                        <div class="stress-emoji" id="stressEmoji">🔗</div>
+                        <div class="stress-percent low" id="stressPercent">—</div>
+                    </div>
+                </div>
+
+                <div class="stress-state relaxed" id="stressState">Waiting for Sensors</div>
+                <div class="stress-subtitle" id="stressSubtitle">Connect your phone or start camera to monitor</div>
+
+                <!-- Webcam Feed -->
+                <div class="qr-section" style="margin-top: 10px; padding: 10px; position: relative;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span class="card-label" style="margin: 0; color: #aab4ff;">📸 Facial Analysis</span>
+                        <div class="conn-badge" style="padding: 4px 8px; border: none; background: transparent;">
+                            <div class="dot off" id="camDot"></div>
+                        </div>
+                    </div>
+                    <div
+                        style="position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid rgba(255,255,255,0.1);">
+                        <video id="webcam" autoplay muted playsinline
+                            style="width: 100%; display: block; border-radius: 12px; transform: scaleX(-1);"></video>
+                        <canvas id="faceCanvas"
+                            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 12px; transform: scaleX(-1);"></canvas>
+
+                        <!-- Overlay for face uninitialized state -->
+                        <div id="camOverlay"
+                            style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(10,10,26,0.8); z-index: 10;">
+                            <button id="btnStartCamera"
+                                style="background: linear-gradient(135deg, #448aff, #7c4dff); border: none; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif;">Start
+                                Camera</button>
+                            <span id="camLoading"
+                                style="display: none; color: #aab4ff; font-size: 0.8rem; margin-top: 8px;">Loading face
+                                AI...</span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+                        <span style="font-size: 0.8rem; color: #7878a0;">Top Emotion:</span>
+                        <span id="faceEmotion" style="font-weight: 700; color: #e8e8f4;">-</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                        <span style="font-size: 0.8rem; color: #7878a0;">Facial Stress:</span>
+                        <span id="faceStressGauge" style="font-weight: 700; color: #00e676;">0%</span>
+                    </div>
+                </div>
+
+                <!-- QR Code -->
+                <div class="qr-section" style="margin-top: 10px;">
+                    <p style="margin-bottom: 8px;">📱 Scan with phone for motion</p>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="qr-img" style="width: 80px; height: 80px; padding: 4px; border-radius: 8px;">
+                            <img id="qrImage" src="/qr" alt="QR Code">
+                        </div>
+                        <div style="flex: 1; text-align: left;">
+                            <p style="font-size: 0.7rem; color: #7878a0; margin-bottom: 4px;">Direct Link:</p>
+                            <a id="qrUrlLink" href="#" target="_blank"
+                                style="font-size: 0.75rem; color: var(--accent-blue); text-decoration: none; word-break: break-all;"></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Top metrics + Charts -->
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <!-- Metrics Row -->
+                <div class="metrics-row">
+                    <div class="card metric-card">
+                        <div class="metric-icon">⚡</div>
+                        <div class="metric-value acc" id="metricAcc">0.00</div>
+                        <div class="metric-label">Accel (m/s²)</div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-icon">🔄</div>
+                        <div class="metric-value gyro" id="metricGyro">0.00</div>
+                        <div class="metric-label">Rotation (°/s)</div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-icon">🔥</div>
+                        <div class="metric-value intensity" id="metricIntensity">0.00</div>
+                        <div class="metric-label">Intensity</div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-icon">🧘</div>
+                        <div class="metric-value still" id="metricStill">0%</div>
+                        <div class="metric-label">Stillness</div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="grid grid-charts">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-label">📈 Accelerometer</div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="accChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-label">🔄 Gyroscope</div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="gyroChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prediction Timeline -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-label">🕐 Stress Timeline</div>
+                    </div>
+                    <div class="timeline-container">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Features Section -->
+        <div class="section">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-label">🔬 Extracted Motion Features</div>
+                </div>
+                <div class="grid grid-features" id="featuresGrid">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── Configuration ──────────────────────────────────────────────────
+        const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const WS_URL = `${wsProtocol}//${location.host}/ws/dashboard`;
+
+        let ws = null;
+        let predictionHistory = [];
+        const MAX_CHART_POINTS = 60;
+        const MAX_TIMELINE = 40;
+
+        // ── Chart Setup ────────────────────────────────────────────────────
+        const chartDefaults = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 300 },
+            plugins: {
+                legend: {
+                    labels: { color: '#7878a0', font: { family: 'Inter', size: 11 } }
+                }
+            },
+            scales: {
+                x: {
+                    display: false,
+                    grid: { display: false }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                    ticks: { color: '#7878a0', font: { family: 'Inter', size: 10 } }
+                }
+            }
+        };
+
+        // Accelerometer chart
+        const accCtx = document.getElementById('accChart').getContext('2d');
+        const accChart = new Chart(accCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'X', data: [], borderColor: '#ff1744', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+                    { label: 'Y', data: [], borderColor: '#00e676', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+                    { label: 'Z', data: [], borderColor: '#448aff', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+                ]
+            },
+            options: { ...chartDefaults }
+        });
+
+        // Gyroscope chart
+        const gyroCtx = document.getElementById('gyroChart').getContext('2d');
+        const gyroChart = new Chart(gyroCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'α', data: [], borderColor: '#ff9100', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+                    { label: 'β', data: [], borderColor: '#7c4dff', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+                    { label: 'γ', data: [], borderColor: '#00e5ff', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
+                ]
+            },
+            options: { ...chartDefaults }
+        });
+
+        // Timeline chart
+        const tlCtx = document.getElementById('timelineChart').getContext('2d');
+        const timelineChart = new Chart(tlCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'P(Stress)',
+                    data: [],
+                    backgroundColor: [],
+                    borderRadius: 4,
+                    barPercentage: 0.7,
+                }]
+            },
+            options: {
+                ...chartDefaults,
+                plugins: {
+                    ...chartDefaults.plugins,
+                    legend: { display: false }
+                },
+                scales: {
+                    ...chartDefaults.scales,
+                    y: {
+                        ...chartDefaults.scales.y,
+                        min: 0, max: 1,
+                        ticks: { ...chartDefaults.scales.y.ticks, stepSize: 0.25 }
+                    }
+                }
+            }
+        });
+
+        // ── Stress Ring Canvas ─────────────────────────────────────────────
+        const ringCanvas = document.getElementById('stressRingCanvas');
+        const ringCtx = ringCanvas.getContext('2d');
+
+        function drawStressRing(probability) {
+            const w = ringCanvas.width;
+            const h = ringCanvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+            const r = 85;
+            const lineWidth = 10;
+
+            ringCtx.clearRect(0, 0, w, h);
+
+            // Background ring
+            ringCtx.beginPath();
+            ringCtx.arc(cx, cy, r, 0, Math.PI * 2);
+            ringCtx.strokeStyle = 'rgba(255,255,255,0.06)';
+            ringCtx.lineWidth = lineWidth;
+            ringCtx.stroke();
+
+            // Progress ring
+            const startAngle = -Math.PI / 2;
+            const endAngle = startAngle + (Math.PI * 2 * probability);
+
+            const gradient = ringCtx.createLinearGradient(0, 0, w, h);
+            if (probability < 0.4) {
+                gradient.addColorStop(0, '#00e676');
+                gradient.addColorStop(1, '#00bfa5');
+            } else if (probability < 0.7) {
+                gradient.addColorStop(0, '#ff9100');
+                gradient.addColorStop(1, '#ff6d00');
+            } else {
+                gradient.addColorStop(0, '#ff1744');
+                gradient.addColorStop(1, '#d50000');
+            }
+
+            ringCtx.beginPath();
+            ringCtx.arc(cx, cy, r, startAngle, endAngle);
+            ringCtx.strokeStyle = gradient;
+            ringCtx.lineWidth = lineWidth;
+            ringCtx.lineCap = 'round';
+            ringCtx.stroke();
+        }
+
+        drawStressRing(0);
+
+        // ── Feature Rendering ──────────────────────────────────────────────
+        const featureConfig = {
+            acc_magnitude_mean: { label: 'Accel Mean', color: '#448aff', max: 20 },
+            acc_magnitude_std: { label: 'Accel Std', color: '#448aff', max: 10 },
+            acc_magnitude_max: { label: 'Accel Max', color: '#448aff', max: 30 },
+            acc_jerk_mean: { label: 'Jerk Mean', color: '#ff9100', max: 100 },
+            acc_jerk_std: { label: 'Jerk Std', color: '#ff9100', max: 200 },
+            stillness_ratio: { label: 'Stillness', color: '#00e5ff', max: 1 },
+            gyro_magnitude_mean: { label: 'Gyro Mean', color: '#7c4dff', max: 50 },
+            gyro_magnitude_std: { label: 'Gyro Std', color: '#7c4dff', max: 40 },
+            gyro_jerk_mean: { label: 'Gyro Jerk', color: '#7c4dff', max: 500 },
+            movement_intensity: { label: 'Intensity', color: '#ff6e40', max: 20 },
+            dominant_frequency: { label: 'Dom. Freq', color: '#00e676', max: 10 },
+            motion_entropy: { label: 'Entropy', color: '#e040fb', max: 5 },
+        };
+
+        function renderFeatures(features) {
+            const grid = document.getElementById('featuresGrid');
+            grid.innerHTML = '';
+
+            for (const [key, cfg] of Object.entries(featureConfig)) {
+                const val = features[key] || 0;
+                const pct = Math.min((Math.abs(val) / cfg.max) * 100, 100);
+
+                const cell = document.createElement('div');
+                cell.className = 'feature-cell';
+                cell.innerHTML = `
+                    <div class="feature-name">${cfg.label}</div>
+                    <div class="feature-value" style="color: ${cfg.color}">${val.toFixed(3)}</div>
+                    <div class="feature-bar">
+                        <div class="feature-bar-fill" style="width: ${pct}%; background: ${cfg.color}"></div>
+                    </div>
+                `;
+                grid.appendChild(cell);
+            }
+        }
+
+        // Initialize with empty features
+        renderFeatures({});
+
+        // ── WebSocket Connection ───────────────────────────────────────────
+        function connectWebSocket() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                document.getElementById('wsDot').className = 'dot on';
+                document.getElementById('wsStatus').textContent = 'Server connected';
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.keepalive) return;
+                    handlePrediction(data);
+                } catch (e) {
+                    console.error('Parse error:', e);
+                }
+            };
+
+            ws.onclose = () => {
+                document.getElementById('wsDot').className = 'dot off';
+                document.getElementById('wsStatus').textContent = 'Disconnected';
+                // Auto-reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = () => {
+                document.getElementById('wsDot').className = 'dot off';
+                document.getElementById('wsStatus').textContent = 'Connection error';
+            };
+        }
+
+        // ── Handle Prediction Data ─────────────────────────────────────────
+        let chartIndex = 0;
+
+        function handlePrediction(data) {
+            const prob = data.stress_probability || 0;
+            const prediction = data.prediction || 0;
+            const features = data.features || {};
+            const connected = data.connected || false;
+
+            lastMotionStress = prob; // Save for fusion loop
+
+            // Update phone connection status
+            document.getElementById('phoneDot').className = connected ? 'dot on' : 'dot off';
+            document.getElementById('phoneStatus').textContent = connected ? 'Phone streaming' : 'Phone disconnected';
+
+            // We do NOT update the ring or stress labels directly here anymore.
+            // The fusion setInterval handles rendering to avoid flickering.
+
+            if (!connected) {
+                return; // Nothing to update
+            }
+
+            // Update metrics
+            document.getElementById('metricAcc').textContent = (features.acc_magnitude_mean || 0).toFixed(2);
+            document.getElementById('metricGyro').textContent = (features.gyro_magnitude_mean || 0).toFixed(2);
+            document.getElementById('metricIntensity').textContent = (features.movement_intensity || 0).toFixed(2);
+            const stillness = ((features.stillness_ratio || 0) * 100).toFixed(0);
+            document.getElementById('metricStill').textContent = stillness + '%';
+
+            // Update features grid
+            renderFeatures(features);
+
+            // Update charts
+            chartIndex++;
+            const label = chartIndex.toString();
+
+            // Accelerometer chart - show magnitude components indirectly
+            pushChartData(accChart, label, [
+                features.acc_magnitude_mean || 0,
+                features.acc_magnitude_std || 0,
+                features.acc_jerk_mean || 0
+            ]);
+
+            // Gyroscope chart
+            pushChartData(gyroChart, label, [
+                features.gyro_magnitude_mean || 0,
+                features.gyro_magnitude_std || 0,
+                features.gyro_jerk_mean || 0
+            ]);
+
+            // Timeline
+            predictionHistory.push(prob);
+            if (predictionHistory.length > MAX_TIMELINE) {
+                predictionHistory = predictionHistory.slice(-MAX_TIMELINE);
+            }
+            timelineChart.data.labels = predictionHistory.map((_, i) => i + 1);
+            timelineChart.data.datasets[0].data = predictionHistory;
+            timelineChart.data.datasets[0].backgroundColor = predictionHistory.map(
+                p => p > 0.5 ? 'rgba(255, 23, 68, 0.7)' : 'rgba(0, 230, 118, 0.7)'
+            );
+            timelineChart.update('none');
+        }
+
+        function pushChartData(chart, label, values) {
+            chart.data.labels.push(label);
+            values.forEach((v, i) => {
+                chart.data.datasets[i].data.push(v);
+            });
+
+            if (chart.data.labels.length > MAX_CHART_POINTS) {
+                chart.data.labels.shift();
+                chart.data.datasets.forEach(ds => ds.data.shift());
+            }
+
+            chart.update('none');
+        }
+
+        // ── Webcam Facial Analysis ─────────────────────────────────────────
+        const video = document.getElementById('webcam');
+        const faceCanvas = document.getElementById('faceCanvas');
+        const btnStartCamera = document.getElementById('btnStartCamera');
+        const camOverlay = document.getElementById('camOverlay');
+        const camLoading = document.getElementById('camLoading');
+
+        let faceModelsLoaded = false;
+        let lastFaceStress = 0.0;
+        let lastMotionStress = 0.0;
+
+        // Load face-api.js models
+        async function loadModels() {
+            camLoading.style.display = 'block';
+            btnStartCamera.style.display = 'none';
+            try {
+                // Models are served from the FastAPI static folder
+                await faceapi.nets.tinyFaceDetector.loadFromUri('/static/models');
+                await faceapi.nets.faceExpressionNet.loadFromUri('/static/models');
+                faceModelsLoaded = true;
+                startVideo();
+            } catch (err) {
+                console.error("Error loading models:", err);
+                camLoading.textContent = "Error loading AI. Check console.";
+            }
+        }
+
+        function startVideo() {
+            navigator.mediaDevices.getUserMedia({ video: {} })
+                .then(stream => {
+                    video.srcObject = stream;
+                    camOverlay.style.display = 'none';
+                    document.getElementById('camDot').className = 'dot on';
+                    document.getElementById('camDot').style.animation = 'dotBlink 2s ease-in-out infinite';
+                })
+                .catch(err => {
+                    console.error("Error accessing webcam:", err);
+                    camLoading.textContent = "Webcam access denied.";
+                    camLoading.style.display = 'block';
+                });
+        }
+
+        btnStartCamera.addEventListener('click', loadModels);
+
+        video.addEventListener('play', () => {
+            const displaySize = { width: video.videoWidth || 300, height: video.videoHeight || 200 };
+            faceapi.matchDimensions(faceCanvas, displaySize);
+
+            setInterval(async () => {
+                if (!faceModelsLoaded) return;
+
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
+
+                const ctx = faceCanvas.getContext('2d');
+                ctx.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
+
+                if (detections.length > 0) {
+                    const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                    faceapi.draw.drawDetections(faceCanvas, resizedDetections);
+
+                    const expressions = detections[0].expressions;
+
+                    let totalVal = 0;
+                    let exprStress = 0;
+                    let topExpr = "";
+                    let maxVal = -1;
+
+                    for (const [expr, prob] of Object.entries(expressions)) {
+                        if (prob > maxVal) { maxVal = prob; topExpr = expr; }
+                        let weight = 0;
+                        if (['angry', 'fearful'].includes(expr)) weight = 0.9;
+                        else if (['disgusted', 'sad'].includes(expr)) weight = 0.75;
+                        else if (expr === 'surprised') weight = 0.4;
+                        else if (expr === 'neutral') weight = 0.2;
+                        else if (expr === 'happy') weight = 0.0;
+
+                        exprStress += prob * weight;
+                        totalVal += prob;
+                    }
+
+                    if (totalVal > 0) exprStress /= totalVal;
+                    lastFaceStress = exprStress;
+
+                    document.getElementById('faceEmotion').textContent = topExpr;
+                    document.getElementById('faceEmotion').style.color = (['angry', 'fearful', 'sad'].includes(topExpr)) ? '#ff1744' : (topExpr === 'happy' ? '#00e676' : '#aab4ff');
+
+                    document.getElementById('faceStressGauge').textContent = (exprStress * 100).toFixed(0) + '%';
+                    document.getElementById('faceStressGauge').style.color = exprStress > 0.6 ? '#ff1744' : (exprStress > 0.3 ? '#ff9100' : '#00e676');
+                } else {
+                    document.getElementById('faceEmotion').textContent = "No face";
+                    document.getElementById('faceEmotion').style.color = '#7878a0';
+                }
+            }, 500);
+        });
+
+        // ── Override HandlePrediction for Fusion ───────────────────────────
+        const originalHandlePrediction = handlePrediction;
+        let remoteFaceStress = 0.0;
+
+        window.handlePrediction = function (data) {
+            // First call original to update charts, gauges, etc.
+            if (originalHandlePrediction) originalHandlePrediction(data);
+
+            // Then capture data for fusion
+            lastMotionStress = data.stress_probability || 0;
+            remoteFaceStress = data.phone_face_stress || 0;
+        };
+
+        // ── Main Fusion Loop ───────────────────────────────────────────────
+        setInterval(() => {
+            let fusionStress = 0;
+            let phoneActive = document.getElementById('phoneStatus').textContent === 'Phone streaming';
+            let camActive = faceModelsLoaded && !video.paused;
+
+            let finalFaceStress = camActive ? lastFaceStress : remoteFaceStress;
+            let finalFaceActive = camActive || (phoneActive && remoteFaceStress > 0.01);
+
+            if (phoneActive && finalFaceActive) {
+                fusionStress = (0.6 * lastMotionStress) + (0.4 * finalFaceStress);
+                document.getElementById('stressSubtitle').textContent = "Multi-Modal Sensor Fusion Active";
+            } else if (phoneActive) {
+                fusionStress = lastMotionStress;
+                document.getElementById('stressSubtitle').textContent = "Calm and steady motion patterns";
+                if (fusionStress > 0.5) document.getElementById('stressSubtitle').textContent = "High restlessness and motion detected";
+            } else if (finalFaceActive) {
+                fusionStress = finalFaceStress;
+                document.getElementById('stressSubtitle').textContent = "Tracking facial expressions only";
+            } else {
+                return; // Nothing active
+            }
+
+            originalDrawStressRing(fusionStress);
+
+            // Update labels based on fusion
+            const emoji = document.getElementById('stressEmoji');
+            const percent = document.getElementById('stressPercent');
+            const state = document.getElementById('stressState');
+
+            percent.textContent = (fusionStress * 100).toFixed(0) + '%';
+
+            if (fusionStress < 0.4) {
+                emoji.textContent = '😌';
+                percent.className = 'stress-percent low';
+                state.className = 'stress-state relaxed';
+                state.textContent = 'Relaxed';
+            } else if (fusionStress < 0.7) {
+                emoji.textContent = '😐';
+                percent.className = 'stress-percent mid';
+                state.className = 'stress-state mid';
+                state.textContent = 'Mild Stress';
+                state.style.color = '#ff9100';
+            } else {
+                emoji.textContent = '😰';
+                percent.className = 'stress-percent high';
+                state.className = 'stress-state stressed';
+                state.textContent = 'HIGH STRESS';
+                state.style.color = '#ff1744';
+            }
+        }, 500);
+
+        // ── Fetch QR URL ───────────────────────────────────────────────────
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => {
+                const url = data.phone_url || '';
+                const link = document.getElementById('qrUrlLink');
+                if (link) {
+                    link.href = url;
+                    link.textContent = url;
+                }
+            })
+            .catch(() => { });
+
+        // ── Start ──────────────────────────────────────────────────────────
+        connectWebSocket();
+
+        // Keep-alive ping every 15s
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send('ping');
+            }
+        }, 15000);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.vscode/
+.git/
+*.pyc
+*.pyo
+*.pyd
+.db
+.sqlite
+data/
+simulation/
+outputs/
+cert.pem
+key.pem
