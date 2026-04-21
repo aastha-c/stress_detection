@@ -3,7 +3,7 @@ __pycache__/
 *.pth
 .venv/
 .vscode/
-models/
+/models/
 outputs/
 data/
 .env
